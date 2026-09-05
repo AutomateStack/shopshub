@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import { CookieConsent } from "@/components/CookieConsent";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { NewsletterPopup } from "@/components/NewsletterPopup";
@@ -110,6 +111,7 @@ const App = () => (
         <PriceDropWatcher />
         <CookieConsent />
         <ExitIntentOffer />
+        <Analytics />
       </TooltipProvider>
     </QueryClientProvider>
   </ErrorBoundary>
