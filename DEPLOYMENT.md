@@ -29,6 +29,23 @@ If the tracked file was ever pushed to a remote repository, rotate any keys it c
    - **Site URL:** your production Vercel URL, then your custom domain once connected.
    - **Redirect URLs:** `http://localhost:8080/**`, `https://YOUR-VERCEL-DOMAIN/**`, and `https://YOUR-DOMAIN/**`.
 7. Configure Edge Function secrets in **Supabase Dashboard > Edge Functions > Secrets** (or `supabase secrets set`). Add only the provider credentials required by the functions you enable: payment gateway, email sender, and AI provider keys. Keep these server-side; never prefix them with `VITE_`.
+
+For Razorpay checkout and wallet top-ups, configure these exact Supabase Edge Function secrets:
+
+```powershell
+supabase secrets set RAZORPAY_KEY_ID=rzp_live_... RAZORPAY_KEY_SECRET=...
+```
+
+Then deploy the payment functions after every code or secret change:
+
+```powershell
+supabase functions deploy razorpay-create-order
+supabase functions deploy razorpay-verify-payment
+supabase functions deploy wallet-topup
+supabase functions deploy wallet-verify-topup
+```
+
+Use `rzp_test_...` credentials while testing. The browser only receives `RAZORPAY_KEY_ID`; never add `RAZORPAY_KEY_SECRET` to `.env`, Vercel, or any `VITE_` variable.
 8. Create/verify the Storage buckets used by the app, including `product-images` and any blog-image bucket referenced in the admin screens. Verify their upload/read policies before launch.
 
 ## 3. Deploy the frontend to Vercel

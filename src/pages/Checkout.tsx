@@ -47,6 +47,22 @@ function loadRazorpayScript(): Promise<boolean> {
   });
 }
 
+async function getFunctionErrorMessage(error: any, data: any, fallback: string): Promise<string> {
+  if (data?.error && typeof data.error === "string") return data.error;
+
+  const response = error?.context;
+  if (response instanceof Response) {
+    try {
+      const body = await response.clone().json();
+      if (typeof body?.error === "string") return body.error;
+    } catch {
+      // The function may have returned a non-JSON error response.
+    }
+  }
+
+  return error?.message || fallback;
+}
+
 interface AppliedCoupon {
   code: string;
   discount_type: string;
@@ -279,7 +295,12 @@ export default function Checkout() {
           "razorpay-create-order", { body: { orderId: orderResult.id } }
         );
         if (rzpError || !rzpData?.razorpayOrderId) {
-          throw new Error("Failed to initiate payment gateway. Please try again or choose Cash on Delivery.");
+          const message = await getFunctionErrorMessage(
+            rzpError,
+            rzpData,
+            "Failed to initiate payment gateway. Please try again or choose Cash on Delivery."
+          );
+          throw new Error(message);
         }
 
         const ok = await loadRazorpayScript();
