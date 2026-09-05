@@ -33,6 +33,7 @@ import { AdminCategories } from "@/components/admin/AdminCategories";
 import { AdminCampaigns } from "@/components/admin/AdminCampaigns";
 import { AdminStockNotifications } from "@/components/admin/AdminStockNotifications";
 import { AdminAnalytics } from "@/components/admin/AdminAnalytics";
+import { useCategories } from "@/hooks/use-categories";
 
 interface ProductForm {
   name: string;
@@ -40,6 +41,7 @@ interface ProductForm {
   price: string;
   stock: string;
   category: string;
+  subcategory_id: string;
   image_url: string;
   featured: boolean;
   volume_tiers: { min_qty: number; discount_percent: number }[];
@@ -53,6 +55,11 @@ interface VariantRow {
   stock: string;
 }
 
+interface GalleryUpload {
+  file: File;
+  alt_text: string;
+}
+
 export default function Admin() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -61,11 +68,11 @@ export default function Admin() {
   const [authChecking, setAuthChecking] = useState(true);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [productForm, setProductForm] = useState<ProductForm>({
-    name: "", description: "", price: "", stock: "", category: "", image_url: "", featured: false, volume_tiers: [],
+    name: "", description: "", price: "", stock: "", category: "", subcategory_id: "", image_url: "", featured: false, volume_tiers: [],
   });
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [additionalImageFiles, setAdditionalImageFiles] = useState<File[]>([]);
+  const [additionalImageFiles, setAdditionalImageFiles] = useState<GalleryUpload[]>([]);
   const [existingAdditionalImages, setExistingAdditionalImages] = useState<any[]>([]);
   const [variants, setVariants] = useState<VariantRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -91,6 +98,8 @@ export default function Admin() {
     },
   });
 
+  const { data: taxonomy = [] } = useCategories();
+
   const { data: orders } = useQuery({
     queryKey: ["admin-orders"], enabled: isAdmin,
     queryFn: async () => {
@@ -101,7 +110,9 @@ export default function Admin() {
 
   const predefinedCategories = ["Electronics", "Clothing", "Home & Kitchen", "Books", "Sports", "Beauty", "Toys", "Food", "Accessories", "Health", "Footwear", "Jewelry", "Furniture"];
   const dbCategories = Array.from(new Set(products?.map(p => p.category).filter(Boolean))) || [];
-  const categories = Array.from(new Set([...dbCategories, ...predefinedCategories]));
+  const taxonomyCategories = taxonomy.map((category) => category.name);
+  const categories = Array.from(new Set([...taxonomyCategories, ...dbCategories, ...predefinedCategories]));
+  const selectedTaxonomyCategory = taxonomy.find((category) => category.name === productForm.category);
   const filteredProducts = products?.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || product.description?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
@@ -125,7 +136,8 @@ export default function Admin() {
       const productData = {
         name: productForm.name, description: productForm.description,
         price: parseFloat(productForm.price), stock: parseInt(productForm.stock),
-        category: productForm.category, image_url: imageUrl, featured: productForm.featured,
+        category: productForm.category, subcategory_id: productForm.subcategory_id || null,
+        image_url: imageUrl, featured: productForm.featured,
         volume_tiers: productForm.volume_tiers
           .filter((t) => t.min_qty > 0 && t.discount_percent > 0)
           .sort((a, b) => a.min_qty - b.min_qty),
@@ -144,12 +156,15 @@ export default function Admin() {
 
       // Upload additional images
       for (let i = 0; i < additionalImageFiles.length; i++) {
-        const url = await uploadImage(additionalImageFiles[i]);
-        await supabase.from("product_images").insert({
+        const image = additionalImageFiles[i];
+        const url = await uploadImage(image.file);
+        const { error: imageError } = await supabase.from("product_images").insert({
           product_id: productId,
           image_url: url,
           display_order: existingAdditionalImages.length + i,
+          alt_text: image.alt_text.trim() || null,
         });
+        if (imageError) throw imageError;
       }
 
       // Save variants - delete old ones and re-insert
@@ -193,7 +208,7 @@ export default function Admin() {
   };
 
   const resetForm = () => {
-    setProductForm({ name: "", description: "", price: "", stock: "", category: "", image_url: "", featured: false, volume_tiers: [] });
+    setProductForm({ name: "", description: "", price: "", stock: "", category: "", subcategory_id: "", image_url: "", featured: false, volume_tiers: [] });
     setEditingProduct(null); setImageFile(null); setAdditionalImageFiles([]); setExistingAdditionalImages([]); setVariants([]);
   };
 
@@ -201,7 +216,8 @@ export default function Admin() {
     setEditingProduct(product);
     setProductForm({
       name: product.name, description: product.description || "", price: product.price.toString(),
-      stock: product.stock.toString(), category: product.category || "", image_url: product.image_url || "", featured: product.featured || false,
+      stock: product.stock.toString(), category: product.category || "", subcategory_id: product.subcategory_id || "",
+      image_url: product.image_url || "", featured: product.featured || false,
       volume_tiers: Array.isArray(product.volume_tiers) ? product.volume_tiers : [],
     });
 
@@ -326,7 +342,7 @@ export default function Admin() {
                               <Label>Category *</Label>
                               <Select
                                 value={productForm.category || "__none"}
-                                onValueChange={(v) => setProductForm({ ...productForm, category: v === "__none" ? "" : v })}
+                                onValueChange={(v) => setProductForm({ ...productForm, category: v === "__none" ? "" : v, subcategory_id: "" })}
                               >
                                 <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                                 <SelectContent>
@@ -334,6 +350,23 @@ export default function Admin() {
                                   {categories.map(cat => <SelectItem key={cat} value={cat!}>{cat}</SelectItem>)}
                                 </SelectContent>
                               </Select>
+                            </div>
+                            <div>
+                              <Label>Subcategory</Label>
+                              <Select
+                                value={productForm.subcategory_id || "__none"}
+                                disabled={!selectedTaxonomyCategory}
+                                onValueChange={(v) => setProductForm({ ...productForm, subcategory_id: v === "__none" ? "" : v })}
+                              >
+                                <SelectTrigger><SelectValue placeholder={selectedTaxonomyCategory ? "Select subcategory" : "Select a category first"} /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none">No subcategory</SelectItem>
+                                  {selectedTaxonomyCategory?.subcategories.map((sub) => (
+                                    <SelectItem key={sub.id} value={sub.id}>{sub.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-muted-foreground mt-1">Manage these options in Admin → Categories.</p>
                             </div>
                             <div><Label>Price (₹) *</Label><Input type="number" step="0.01" value={productForm.price} onChange={(e) => setProductForm({ ...productForm, price: e.target.value })} placeholder="0.00" /></div>
                             <div><Label>Stock *</Label><Input type="number" value={productForm.stock} onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })} placeholder="0" /></div>
@@ -397,23 +430,31 @@ export default function Admin() {
                               type="file" accept="image/*" multiple
                               onChange={(e) => {
                                 const files = Array.from(e.target.files || []);
-                                setAdditionalImageFiles(prev => [...prev, ...files]);
+                                setAdditionalImageFiles(prev => [...prev, ...files.map((file) => ({ file, alt_text: "" }))]);
                               }}
                             />
                             {additionalImageFiles.length > 0 && (
-                              <div className="flex flex-wrap gap-2 mt-2">
-                                {additionalImageFiles.map((file, i) => (
-                                  <Badge key={i} variant="secondary" className="gap-1">
-                                    <ImageIcon className="h-3 w-3" />
-                                    {file.name}
-                                    <button onClick={() => setAdditionalImageFiles(prev => prev.filter((_, idx) => idx !== i))}>
+                              <div className="space-y-2 mt-2">
+                                {additionalImageFiles.map((image, i) => (
+                                  <div key={`${image.file.name}-${i}`} className="flex gap-2 items-center rounded-md border p-2">
+                                    <Badge variant="secondary" className="gap-1 shrink-0">
+                                      <ImageIcon className="h-3 w-3" />
+                                      {image.file.name}
+                                    </Badge>
+                                    <Input
+                                      className="h-8 text-xs"
+                                      value={image.alt_text}
+                                      placeholder="Color / variant label, e.g. Red"
+                                      onChange={(e) => setAdditionalImageFiles(prev => prev.map((item, idx) => idx === i ? { ...item, alt_text: e.target.value } : item))}
+                                    />
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setAdditionalImageFiles(prev => prev.filter((_, idx) => idx !== i))} aria-label={`Remove ${image.file.name}`}>
                                       <X className="h-3 w-3" />
-                                    </button>
-                                  </Badge>
+                                    </Button>
+                                  </div>
                                 ))}
                               </div>
                             )}
-                            <p className="text-xs text-muted-foreground mt-1">Upload multiple images for the product gallery (different angles, close-ups, etc.)</p>
+                            <p className="text-xs text-muted-foreground mt-1">For color variants, enter the exact color name here (for example, “Red”). Selecting that color on the product page will switch to this image.</p>
                           </div>
                         </TabsContent>
 

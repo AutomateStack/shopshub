@@ -39,15 +39,19 @@ export function ProductImageGallery({ mainImage, productName, productId, activeV
     ...(additionalImages?.map((img) => img.image_url) || []),
   ].filter(Boolean);
 
-  // Jump to the image tagged with the selected variant (matched on its label / alt text)
+  // Jump to the image tagged with the selected variant (matched on its label / alt text).
+  // Fall back to the main image when no image is tagged for the selected option.
   useEffect(() => {
-    if (!activeVariant || !additionalImages?.length) return;
+    if (!activeVariant || !additionalImages?.length) {
+      setSelectedIndex(0);
+      return;
+    }
     const needle = activeVariant.trim().toLowerCase();
     const idx = additionalImages.findIndex((img) =>
       (img.alt_text || "").toLowerCase().includes(needle) ||
       (img.image_url || "").toLowerCase().includes(needle)
     );
-    if (idx >= 0) setSelectedIndex(idx + 1);
+    setSelectedIndex(idx >= 0 ? idx + 1 : 0);
   }, [activeVariant, additionalImages]);
 
   // Lock body scroll while the lightbox is open

@@ -31,7 +31,7 @@ export default function ProductDetail() {
   const [quantity, setQuantity] = useState(1);
   const [user, setUser] = useState<any>(null);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
-  const [variantPriceAdjustment, setVariantPriceAdjustment] = useState(0);
+  const [variantPriceAdjustments, setVariantPriceAdjustments] = useState<Record<string, number>>({});
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -100,13 +100,7 @@ export default function ProductDetail() {
 
   const handleVariantChange = (type: string, value: string, priceAdj: number) => {
     setSelectedVariants(prev => ({ ...prev, [type]: value }));
-    // Recalculate total price adjustment from all selected variants
-    const newVariants = { ...selectedVariants, [type]: value };
-    // We'll just use the latest adjustment for simplicity since we track per-type
-    setVariantPriceAdjustment(prev => {
-      // This is simplified - ideally track per variant type
-      return priceAdj;
-    });
+    setVariantPriceAdjustments(prev => ({ ...prev, [type]: priceAdj }));
   };
 
   const addToCartMutation = useMutation({
@@ -178,7 +172,7 @@ export default function ProductDetail() {
     );
   }
 
-  const effectivePrice = product.price + variantPriceAdjustment;
+  const effectivePrice = product.price + Object.values(variantPriceAdjustments).reduce((total, adjustment) => total + adjustment, 0);
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
